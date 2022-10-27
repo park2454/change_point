@@ -112,12 +112,15 @@ em = function(T, p, k,
     true = list(
       Theta = Theta,
       A = A,
-      prior = prior
+      prior = prior,
+      Y = Theta %*% t(A) + apply(change,1,adjust)
     ),
     estimate = list(
       Theta = Theta_new,
       A = A_new,
-      prior = prior_new
+      prior = prior_new,
+      Y = Theta_new %*% t(A_new) +
+        apply(cbind(pre_new,post_new,apply(posterior,2,which.max)),1,adjust)
     ),
     dim = list(
       T = T,
@@ -138,6 +141,7 @@ em = function(T, p, k,
 
 heat_factor = array(NA,dim = c(5,5,4,30))
 heat_prior = array(NA,dim = c(5,5,4,30))
+error = array(NA,dim = c(5,5,4,30))
 K = c(2,5,10,50)
 for(rep in 1:30){
   for(k in 1:4){
@@ -148,7 +152,8 @@ for(rep in 1:30){
         heat_factor[T,p,k,rep] = sqrt(mean(err^2))
         err = sum(abs(out$true$prior - out$estimate$prior))/2
         heat_prior[T,p,k,rep] = err
-        save(heat_factor, heat_prior, file = "em.RData")
+        error[T,p,k,rep] = norm(out$true$Y - out$estimate$Y, type="F")/200/sqrt(T*p)
+        # save(heat_factor, heat_prior, error, file = "em_fair2.RData")
       }
     }
   }

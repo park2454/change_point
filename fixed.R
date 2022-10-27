@@ -117,25 +117,25 @@ fixed = function(T, p, k,
   return(out)
 }
 
-# estimation comparison
-pdf("histogram.pdf",width=12,height=6)
-par(mfrow=c(2,4))
-for(dist in c(FALSE,TRUE)){
-  for(mag in 0:3){
-    samp = c()
-    for(rep in 1:1){
-      out = fixed(T=100, p=100, k=5, change=dist, signal=mag)
-      err = (out$true$change[,3] - out$estimate$change[,3])/out$dim$T
-      samp = c(samp,err)
-    }
-    hist(samp, breaks=seq(-1,1,1/20), 
-         main = paste0("dist,mag=",dist,mag),
-         xlab = paste0("sample var=",round(var(samp),4)))
-  }
-}
-dev.off()
-
-mean((out$true$Y - out$estimate$Y)^2)
+# # estimation comparison
+# pdf("histogram.pdf",width=12,height=6)
+# par(mfrow=c(2,4))
+# for(dist in c(FALSE,TRUE)){
+#   for(mag in 0:3){
+#     samp = c()
+#     for(rep in 1:1){
+#       out = fixed(T=100, p=100, k=5, change=dist, signal=mag)
+#       err = (out$true$change[,3] - out$estimate$change[,3])/out$dim$T
+#       samp = c(samp,err)
+#     }
+#     hist(samp, breaks=seq(-1,1,1/20), 
+#          main = paste0("dist,mag=",dist,mag),
+#          xlab = paste0("sample var=",round(var(samp),4)))
+#   }
+# }
+# dev.off()
+# 
+# mean((out$true$Y - out$estimate$Y)^2)
 
 # Most of the estimation is correct
 # There are a few extreme errors but the latent part seems to be consistent
@@ -146,6 +146,7 @@ mean((out$true$Y - out$estimate$Y)^2)
 
 heat_factor = array(NA,dim = c(5,5,4,30))
 heat_prior = array(NA,dim = c(5,5,4,30))
+error = array(NA,dim = c(5,5,4,30))
 K = c(2,5,10,50)
 for(rep in 1:30){
   for(k in 1:4){
@@ -158,7 +159,8 @@ for(rep in 1:30){
           heat_factor[T,p,k,rep] = sqrt(mean(err^2))
           err = sum(abs(out$true$change[,3] - out$estimate$change[,3]))/2
           heat_prior[T,p,k,rep] = err
-          save(heat_factor, heat_prior, file = "fixed_fair.RData")
+          error[T,p,k,rep] = norm(out$true$Y - out$estimate$Y, type="F")/200/sqrt(T*p)
+          save(heat_factor, heat_prior, error, file = "fixed_fair2.RData")
       }
     }
   }
