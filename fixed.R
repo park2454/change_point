@@ -1,9 +1,11 @@
 fixed = function(T, p, k,
                  max_iter = 1000, 
                  verbose = TRUE, 
-                 SVD = FALSE, 
+                 SVD = TRUE, 
                  change_dist = FALSE,
-                 signal_mag = 3){
+                 prob = 0.5,
+                 signal_mag = 3,
+                 rand_init = FALSE){
   
   # data generation
   Theta = matrix(rnorm(T*k),T,k)
@@ -17,7 +19,7 @@ fixed = function(T, p, k,
   pre_mean = rnorm(p)
   post_mean = rnorm(p, 2*signal_mag*rbinom(p,1,0.5)-signal_mag)
   if(change_dist){
-    tau = 1+rbinom(p,T-1,0.5) #binomial values 0 ~ (T-1)
+    tau = 1+rbinom(p,T-1,prob) #binomial values 0 ~ (T-1)
   } else {
     tau = sample(1:T, p, replace=TRUE)
   }
@@ -44,12 +46,15 @@ fixed = function(T, p, k,
   }
   
   # initialize
-  # Theta_hat = matrix(rnorm(T*k),T,k)
-  # A_hat = matrix(rnorm(p*k),p,k)
-  # change_hat = matrix(0,p,3)
-  Theta_hat = Theta
-  A_hat = A
-  change_hat = change
+  if(rand_init){
+    Theta_hat = matrix(0,T,k)
+    A_hat = matrix(0,p,k)
+    change_hat = apply(Y,2,mean)
+  } else {
+    Theta_hat = Theta
+    A_hat = A
+    change_hat = change
+  }
   
   # loop
   for(iter in 1:max_iter){
@@ -78,9 +83,8 @@ fixed = function(T, p, k,
     }
     
     # check
-    dt = norm(change_new - change_hat, type="F") +
-      norm(Theta_new - Theta_hat, type="F") +
-      norm(A_new - A_hat, type="F")
+    dt = norm(change_new - change_hat, type="F")^2 +
+      norm(Theta_new%*%t(A_new) - Theta_hat%*%t(A_hat), type="F")^2
     
     if (dt < 1e-6){
       if (verbose) cat("converged at iteration",iter,"\n")
@@ -99,12 +103,16 @@ fixed = function(T, p, k,
     true = list(
       Theta = Theta,
       A = A,
+      factor = Theta %*% t(A),
+      M = apply(change,1,adjust),
       change = change,
       Y = Theta %*% t(A) + apply(change,1,adjust)
     ),
     estimate = list(
       Theta = Theta_new,
       A = A_new,
+      factor = Theta_new %*% t(A_new),
+      M = apply(change_new,1,adjust),
       change = change_new,
       Y = Theta_new %*% t(A_new) + apply(change_new,1,adjust)
     ),
@@ -144,23 +152,30 @@ fixed = function(T, p, k,
 # Use k = 2,5,10,50
 # plot a heatmap of average errors for varying T and p
 
-heat_factor = array(NA,dim = c(5,5,4,30))
-heat_prior = array(NA,dim = c(5,5,4,30))
-error = array(NA,dim = c(5,5,4,30))
+mse = function(x) mean(x^2, na.rm=TRUE)
+tv = function(x) sum(abs(x), na.rm=TRUE)/2
+mse_factor = array(NA,dim = c(5,5,4,10))
+mse_M = array(NA,dim = c(5,5,4,10))
+mse_Y = array(NA,dim = c(5,5,4,10))
+
+distr=TRUE
+rand=TRUE
+mag=3
+
 K = c(2,5,10,50)
-for(rep in 1:30){
-  for(k in 1:4){
-    for(T in 1:5){
-      for(p in 1:5){
-          # out = fixed(T=T*200, p=p*200, k=K[k], change=FALSE, sig=0)
-          # heat_weak[T,p,k,rep] = norm(out$true$Y - out$estimate$Y, type="F")/(200*sqrt(T*p))
-          out = fixed(T=T*200, p=p*200, k=K[k], change=FALSE, sig=3)
-          err = (out$true$Theta)%*%t(out$true$A)-(out$estimate$Theta)%*%t(out$estimate$A)
-          heat_factor[T,p,k,rep] = sqrt(mean(err^2))
-          err = sum(abs(out$true$change[,3] - out$estimate$change[,3]))/2
-          heat_prior[T,p,k,rep] = err
-          error[T,p,k,rep] = norm(out$true$Y - out$estimate$Y, type="F")/200/sqrt(T*p)
-          save(heat_factor, heat_prior, error, file = "fixed_fair2.RData")
+for(rep in 1:10){
+  for(k in 1:3){
+    for(T in 1:3){
+      for(p in 1:3){
+          out = fixed(T=T*200, p=p*200, k=K[k],
+                      change_dist = distr, 
+                      rand_init = rand,
+                      signal_mag = mag)
+          mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
+          mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
+          mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
+          save(mse_factor, mse_M, mse_Y,
+               file = paste0("fixed_dist=",distr,"_mag=",mag,"_rand=",rand,".rda"))
       }
     }
   }

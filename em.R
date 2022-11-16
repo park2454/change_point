@@ -3,9 +3,10 @@ em = function(T, p, k,
               verbose = TRUE, 
               SVD = TRUE, 
               change_dist = FALSE, #FALSE: uniform, TRUE: binomial,
-              structured = FALSE,
+              parametric = FALSE,
               prob = 0.5,
-              signal_mag = 3){
+              signal_mag = 3,
+              rand_init = FALSE){
   # data generation
   Theta = matrix(rnorm(T*k),T,k)
   A = matrix(rnorm(k*p),p,k)
@@ -31,11 +32,21 @@ em = function(T, p, k,
     matrix(rnorm(T*p), T, p)
   
   # initialize
-  Theta_hat = Theta
-  A_hat = A
-  pre_hat = pre
-  post_hat = post
-  prior_hat = prior
+  if(rand_init){
+    pre_hat = apply(Y,2,mean)
+    post_hat = pre_hat
+    prior_hat = rep(1/T,T)
+    svd_hat = svd(Y - outer(rep(1,T), post_hat), nu=k, nv=k)
+    Theta_hat = svd_hat$d[1:k] * t(svd_hat$u)
+    Theta_hat = t(Theta_hat)
+    A_hat = svd_hat$v
+  } else {
+    Theta_hat = Theta
+    A_hat = A
+    pre_hat = pre
+    post_hat = post
+    prior_hat = prior
+  }
   Q_hat = -Inf
   
   for(iter in 1:max_iter){
@@ -79,7 +90,7 @@ em = function(T, p, k,
     post_new = apply(post_new*posterior,2,sum)/apply( (T:1-1)*posterior,2,sum )
     
     # pi
-    if(structured){
+    if(parametric){
       alpha = sum((1:T-1)*posterior)/sum(posterior)/(T-1)
       prior_new = dbinom(1:T-1,T-1,alpha)
     } else {
@@ -108,19 +119,26 @@ em = function(T, p, k,
     } 
   } 
   
+  change_new = cbind(pre_new, post_new, apply(posterior,2,which.max))
+  
   out = list(
     true = list(
       Theta = Theta,
       A = A,
+      factor = Theta %*% t(A),
+      M = apply(change,1,adjust),
+      change = change,
       prior = prior,
       Y = Theta %*% t(A) + apply(change,1,adjust)
     ),
     estimate = list(
       Theta = Theta_new,
       A = A_new,
+      factor = Theta_new %*% t(A_new),
+      M = apply(change_new,1,adjust),
+      change = change_new,
       prior = prior_new,
-      Y = Theta_new %*% t(A_new) +
-        apply(cbind(pre_new,post_new,apply(posterior,2,which.max)),1,adjust)
+      Y = Theta_new %*% t(A_new) + apply(change_new,1,adjust)
     ),
     dim = list(
       T = T,
@@ -131,29 +149,34 @@ em = function(T, p, k,
   return(out)
 }
 
-# par(mfrow=c(2,1))
-# out = em(T=1000,p=1000,k=50, structured = FALSE)
-# plot(out$estimate$prior, type="l",col="red")
-# lines(1:T,dbinom(1:T-1,T-1,0.5))
-# out = em(T=1000,p=1000,k=50, structured = TRUE)
-# plot(out$estimate$prior, type="l",col="red")
-# lines(1:T,dbinom(1:T-1,T-1,0.5))
+mse = function(x) mean(x^2, na.rm=TRUE)
+tv = function(x) sum(abs(x), na.rm=TRUE)/2
+mse_factor = array(NA,dim = c(5,5,4,10))
+mse_M = array(NA,dim = c(5,5,4,10))
+mse_Y = array(NA,dim = c(5,5,4,10))
+prior = array(NA,dim = c(5,5,4,10))
 
-heat_factor = array(NA,dim = c(5,5,4,30))
-heat_prior = array(NA,dim = c(5,5,4,30))
-error = array(NA,dim = c(5,5,4,30))
+distr=TRUE
+param=TRUE
+rand=TRUE
+mag=3
+
 K = c(2,5,10,50)
-for(rep in 1:30){
-  for(k in 1:4){
-    for(T in 1:5){
-      for(p in 1:5){
-        out = em(T=T*200, p=p*200, k=K[k])
-        err = (out$true$Theta)%*%t(out$true$A)-(out$estimate$Theta)%*%t(out$estimate$A)
-        heat_factor[T,p,k,rep] = sqrt(mean(err^2))
-        err = sum(abs(out$true$prior - out$estimate$prior))/2
-        heat_prior[T,p,k,rep] = err
-        error[T,p,k,rep] = norm(out$true$Y - out$estimate$Y, type="F")/200/sqrt(T*p)
-        # save(heat_factor, heat_prior, error, file = "em_fair2.RData")
+for(rep in 1:10){
+  for(k in 1:3){
+    for(T in 1:3){
+      for(p in 1:3){
+        out = em(T=T*200, p=p*200, k=K[k],
+                 change_dist = distr, 
+                 parametric = param,
+                 rand_init = rand,
+                 signal_mag = mag)
+        mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
+        mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
+        mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
+        prior[T,p,k,rep] = tv(out$true$prior - out$est$prior)
+        save(mse_factor, mse_M, mse_Y, prior,
+             file = paste0("em_dist=",distr,"_mag=",mag,"_rand=",rand,"_param=",param,".rda"))
       }
     }
   }
