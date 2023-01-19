@@ -10,7 +10,7 @@ lowrank = function(T, p, k,
   A = matrix(rnorm(k*p),p,k)
   
   m = rnorm(p,signal_mag)
-  M = outer(1:T,m)
+  M = outer(rep(1,T),m)
   
   Y = Theta %*% t(A) +
     M +
@@ -20,7 +20,7 @@ lowrank = function(T, p, k,
   if(rand_init){
     Theta_hat = matrix(0,T,k)
     A_hat = matrix(0,p,k)
-    m_hat = apply(Y,2,mean)
+    m_hat = rep(0,p)
   } else {
     Theta_hat = Theta
     A_hat = A
@@ -36,7 +36,7 @@ lowrank = function(T, p, k,
     m_new = apply(adj_Y,2,mean)
     
     # adjusted mean
-    adj_Y = Y - outer(1:T, m_new)
+    adj_Y = Y - outer(rep(1,T), m_new)
     
     if(SVD){
       # SVD
@@ -75,17 +75,17 @@ lowrank = function(T, p, k,
       Theta = Theta,
       A = A,
       factor = Theta %*% t(A),
-      M = outer(1:T,m),
+      M = outer(rep(1,T),m),
       m = m,
-      Y = Theta %*% t(A) + outer(1:T,m)
+      Y = Theta %*% t(A) + outer(rep(1,T),m)
     ),
     estimate = list(
       Theta = Theta_new,
       A = A_new,
       factor = Theta_new %*% t(A_new),
-      M = outer(1:T,m_new),
+      M = outer(rep(1,T),m_new),
       m = m_new,
-      Y = Theta_new %*% t(A_new) + outer(1:T,m_new)
+      Y = Theta_new %*% t(A_new) + outer(rep(1,T),m_new)
     ),
     dim = list(
       T = T,
@@ -113,7 +113,7 @@ lowrank0 = function(T, p, k){
     true = list(
       Theta = Theta,
       A = A,
-      Y = Y
+      Y = Theta %*% t(A)
     ),
     estimate = list(
       Theta = Theta_new,
@@ -147,14 +147,14 @@ for(rep in 1:10){
   for(k in 1:3){
     for(T in 1:3){
       for(p in 1:3){
-        # out = lowrank(T=T,p=p,k=K[k], rand_init=TRUE)
-        # mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
-        # mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
-        # mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
-        out = lowrank0(T=T,p=p,k=K[k])
+        out = lowrank(T=T*200,p=p*200,k=K[k], rand_init=TRUE)
+        mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
+        mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
+        mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
+        out = lowrank0(T=T*200,p=p*200,k=K[k])
         mse_Y2[T,p,k,rep] = mse(out$true$Y - out$est$Y)
         save(mse_factor, mse_M, mse_Y, mse_Y2,
-             file = "baseline.rad")
+             file = "baseline.rda")
       }
     }
   }

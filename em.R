@@ -6,7 +6,8 @@ em = function(T, p, k,
               parametric = FALSE,
               prob = 0.5,
               signal_mag = 3,
-              rand_init = FALSE){
+              rand_init = FALSE,
+              identifiability = TRUE){
   # data generation
   Theta = matrix(rnorm(T*k),T,k)
   A = matrix(rnorm(k*p),p,k)
@@ -18,6 +19,15 @@ em = function(T, p, k,
   
   pre = rnorm(p)
   post = rnorm(p, 2*signal_mag*rbinom(p,1,0.5)-signal_mag)
+  
+  if(identifiability){
+    # identifiability
+    th_bar = apply(Theta, 2, mean)
+    Theta = Theta - outer( rep(1,T), th_bar)
+    pre = pre + A %*% th_bar
+    post = post + A %*% th_bar
+  }
+  
   if(change_dist){
     tau = 1+rbinom(p,T-1,prob) #binomial values 0 ~ (T-1)
     prior = dbinom(1:T-1,T-1,prob)
@@ -70,6 +80,9 @@ em = function(T, p, k,
       svd_hat = svd(Y_adj, nu=k, nv=k)
       Theta_new = svd_hat$d[1:k] * t(svd_hat$u)
       Theta_new = t(Theta_new)
+      if(identifiability){
+        Theta_new = Theta_new - outer( rep(1,T), apply(Theta_new, 2, mean) )
+      }
       A_new = svd_hat$v
     } else {
       # multiple linear regression
@@ -119,13 +132,13 @@ em = function(T, p, k,
     } 
   } 
   
-  change_new = cbind(pre_new, post_new, apply(posterior,2,which.max))
+  change_new = cbind(pre_new, post_new, apply(posterior*(1:T),2,sum) |> floor() )
   
   out = list(
     true = list(
       Theta = Theta,
       A = A,
-      factor = Theta %*% t(A),
+      factor = Theta %*% t(A) + outer(rep(1,T), change[,1]),
       M = apply(change,1,adjust),
       change = change,
       prior = prior,
@@ -134,7 +147,7 @@ em = function(T, p, k,
     estimate = list(
       Theta = Theta_new,
       A = A_new,
-      factor = Theta_new %*% t(A_new),
+      factor = Theta_new %*% t(A_new) + outer(rep(1,T), change_new[,1]),
       M = apply(change_new,1,adjust),
       change = change_new,
       prior = prior_new,

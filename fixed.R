@@ -5,7 +5,8 @@ fixed = function(T, p, k,
                  change_dist = FALSE,
                  prob = 0.5,
                  signal_mag = 3,
-                 rand_init = FALSE){
+                 rand_init = FALSE,
+                 identifiability = TRUE){
   
   # data generation
   Theta = matrix(rnorm(T*k),T,k)
@@ -18,11 +19,21 @@ fixed = function(T, p, k,
   
   pre_mean = rnorm(p)
   post_mean = rnorm(p, 2*signal_mag*rbinom(p,1,0.5)-signal_mag)
+  
+  if(identifiability){
+    # identifiability
+    th_bar = apply(Theta, 2, mean)
+    Theta = Theta - outer( rep(1,T), th_bar)
+    pre_mean = pre_mean + A %*% th_bar
+    post_mean = post_mean + A %*% th_bar
+  }
+  
   if(change_dist){
     tau = 1+rbinom(p,T-1,prob) #binomial values 0 ~ (T-1)
   } else {
     tau = sample(1:T, p, replace=TRUE)
   }
+  
   change = cbind(pre_mean,post_mean,tau)
   
   Y = Theta %*% t(A) +
@@ -72,9 +83,12 @@ fixed = function(T, p, k,
       svd_hat = svd(adj_Y, nu=k, nv=k)
       Theta_new = svd_hat$d[1:k] * t(svd_hat$u)
       Theta_new = t(Theta_new)
+      if(identifiability){
+        Theta_new = Theta_new - outer( rep(1,T), apply(Theta_new, 2, mean) )
+      }
       A_new = svd_hat$v
     } else {
-    # lm for theta, A
+      # lm for theta, A
       mlr = lm(t(adj_Y)~A_hat+0)
       Theta_new = t(mlr$coefficients)
       
@@ -103,7 +117,7 @@ fixed = function(T, p, k,
     true = list(
       Theta = Theta,
       A = A,
-      factor = Theta %*% t(A),
+      factor = Theta %*% t(A) + outer(rep(1,T), change[,1]),
       M = apply(change,1,adjust),
       change = change,
       Y = Theta %*% t(A) + apply(change,1,adjust)
@@ -111,7 +125,7 @@ fixed = function(T, p, k,
     estimate = list(
       Theta = Theta_new,
       A = A_new,
-      factor = Theta_new %*% t(A_new),
+      factor = Theta_new %*% t(A_new) + outer(rep(1,T), change_new[,1]),
       M = apply(change_new,1,adjust),
       change = change_new,
       Y = Theta_new %*% t(A_new) + apply(change_new,1,adjust)
@@ -167,15 +181,15 @@ for(rep in 1:10){
   for(k in 1:3){
     for(T in 1:3){
       for(p in 1:3){
-          out = fixed(T=T*200, p=p*200, k=K[k],
-                      change_dist = distr, 
-                      rand_init = rand,
-                      signal_mag = mag)
-          mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
-          mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
-          mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
-          save(mse_factor, mse_M, mse_Y,
-               file = paste0("fixed_dist=",distr,"_mag=",mag,"_rand=",rand,".rda"))
+        out = fixed(T=T*200, p=p*200, k=K[k],
+                    change_dist = distr, 
+                    rand_init = rand,
+                    signal_mag = mag)
+        mse_factor[T,p,k,rep] = mse(out$true$factor - out$est$factor)
+        mse_M[T,p,k,rep] = mse(out$true$M - out$est$M)
+        mse_Y[T,p,k,rep] = mse(out$true$Y - out$est$Y)
+        save(mse_factor, mse_M, mse_Y,
+             file = paste0("fixed_dist=",distr,"_mag=",mag,"_rand=",rand,".rda"))
       }
     }
   }
